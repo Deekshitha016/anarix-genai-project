@@ -40,6 +40,9 @@ chart.png
 *.swp
 *.swo
 
+# ZIP and archive files
+*.zip 
+
 
 # System Files
 
@@ -47,8 +50,10 @@ chart.png
 Thumbs.db
 
 
+
 # Secret or Key Files
 
 .env
 *.key
 openrouter_key.txt
+*.zip
