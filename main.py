@@ -4,7 +4,6 @@ load_dotenv()
 
 import time
 import sqlite3
-import pandas as pd
 import matplotlib.pyplot as plt
 
 from fastapi import FastAPI
@@ -12,20 +11,15 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 import requests
 
-# Set non-GUI backend for Matplotlib
 plt.switch_backend("Agg")
-
 app = FastAPI()
 
-# Config
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 OPENROUTER_MODEL = "mistralai/mistral-7b-instruct"
 
-# Pydantic Model
 class QuestionRequest(BaseModel):
     question: str
 
-# Call OpenRouter LLM
 def get_sql_from_llm(question: str) -> str:
     headers = {
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
@@ -44,16 +38,12 @@ Only return the SQL. Do not explain anything.
 
 Question: "{question}"
 """
-
     body = {
         "model": OPENROUTER_MODEL,
-        "messages": [
-            {"role": "user", "content": prompt}
-        ]
+        "messages": [{"role": "user", "content": prompt}]
     }
 
     response = requests.post("https://openrouter.ai/api/v1/chat/completions", json=body, headers=headers)
-
     if response.status_code != 200:
         raise Exception(f"OpenRouter API Error: {response.text}")
 
@@ -61,7 +51,6 @@ Question: "{question}"
     sql = llm_response.strip().split('\n')[0]
     return sql.strip("`").strip("```sql").strip("```")
 
-# Run SQL
 def query_database(sql: str):
     try:
         conn = sqlite3.connect("ecommerce_data.db")
@@ -74,21 +63,19 @@ def query_database(sql: str):
     except Exception as e:
         return {"error": f"SQL Error: {str(e)}"}
 
-# Chart generator
 def generate_chart(data: list, title="Chart", x_label=None, y_label=None):
-    if not data or not isinstance(data, list):
+    if not data or not isinstance(data, list) or len(data) == 0:
         return None
     try:
         keys = list(data[0].keys())
-        x = [str(d[keys[0]]) for d in data]
-        y = [d[keys[1]] for d in data]
+        x = [str(k) for k in data[0].keys()]
+        y = [float(v) for v in data[0].values()]
 
-        plt.figure(figsize=(10, 6))
-        plt.bar(x, y, color="skyblue")
+        plt.figure(figsize=(6, 5))
+        plt.bar(x, y, color="salmon")
         plt.title(title)
-        plt.xlabel(x_label or keys[0])
-        plt.ylabel(y_label or keys[1])
-        plt.xticks(rotation=45)
+        plt.xlabel(x_label or "Metric")
+        plt.ylabel(y_label or "Value")
         plt.tight_layout()
         plt.savefig("chart.png")
         return "chart.png"
@@ -96,33 +83,22 @@ def generate_chart(data: list, title="Chart", x_label=None, y_label=None):
         print("Chart error:", e)
         return None
 
-# Ask endpoint
 @app.post("/ask")
 def ask(request: QuestionRequest):
     try:
         question_text = request.question.strip().lower()
 
-        # Hardcoded fallback queries
-        if question_text == "show total sales per item":
-            sql_query = """
-                SELECT item_id, SUM(total_sales) AS total_sales
-                FROM total_sales_metrics
-                GROUP BY item_id
-            """
+        if question_text == "what is my total sales?":
+            sql_query = "SELECT ROUND(SUM(total_sales), 2) AS total_sales FROM total_sales_metrics"
         elif question_text == "calculate the roas":
             sql_query = """
-                SELECT 
-                    a.item_id, 
-                    ROUND(SUM(t.total_sales) / SUM(a.ad_spend), 2) AS roas
+                SELECT ROUND(SUM(t.total_sales) / SUM(a.ad_spend), 2) AS roas
                 FROM ad_sales_metrics a
                 JOIN total_sales_metrics t ON a.item_id = t.item_id
-                GROUP BY a.item_id
             """
         elif question_text == "which product had the highest cpc?":
             sql_query = """
-                SELECT 
-                    item_id, 
-                    ROUND(ad_spend / clicks, 2) AS cpc
+                SELECT item_id, ROUND(ad_spend / clicks, 2) AS cpc
                 FROM ad_sales_metrics
                 WHERE clicks > 0
                 ORDER BY cpc DESC
@@ -132,10 +108,7 @@ def ask(request: QuestionRequest):
             sql_query = get_sql_from_llm(request.question)
 
         result = query_database(sql_query)
-
-        chart = None
-        if isinstance(result, list) and len(result) > 0 and "per" in question_text:
-            chart = generate_chart(result)
+        chart = generate_chart(result)
 
         return {
             "question": request.question,
@@ -147,7 +120,6 @@ def ask(request: QuestionRequest):
     except Exception as e:
         return JSONResponse(content={"error": str(e)}, status_code=500)
 
-# Typing effect stream endpoint
 @app.post("/ask-stream")
 def ask_stream(request: QuestionRequest):
     def event_stream():
@@ -156,27 +128,17 @@ def ask_stream(request: QuestionRequest):
             yield f"You: {question_text}\n\n"
             time.sleep(0.5)
 
-            # Same logic reused
-            if question_text == "show total sales per item":
-                sql_query = """
-                    SELECT item_id, SUM(total_sales) AS total_sales
-                    FROM total_sales_metrics
-                    GROUP BY item_id
-                """
+            if question_text == "what is my total sales?":
+                sql_query = "SELECT ROUND(SUM(total_sales), 2) AS total_sales FROM total_sales_metrics"
             elif question_text == "calculate the roas":
                 sql_query = """
-                    SELECT 
-                        a.item_id, 
-                        ROUND(SUM(t.total_sales) / SUM(a.ad_spend), 2) AS roas
+                    SELECT ROUND(SUM(t.total_sales) / SUM(a.ad_spend), 2) AS roas
                     FROM ad_sales_metrics a
                     JOIN total_sales_metrics t ON a.item_id = t.item_id
-                    GROUP BY a.item_id
                 """
             elif question_text == "which product had the highest cpc?":
                 sql_query = """
-                    SELECT 
-                        item_id, 
-                        ROUND(ad_spend / clicks, 2) AS cpc
+                    SELECT item_id, ROUND(ad_spend / clicks, 2) AS cpc
                     FROM ad_sales_metrics
                     WHERE clicks > 0
                     ORDER BY cpc DESC
@@ -189,7 +151,6 @@ def ask_stream(request: QuestionRequest):
             time.sleep(0.5)
 
             result = query_database(sql_query)
-
             if isinstance(result, list):
                 result_text = "\n".join(str(r) for r in result)
             else:
@@ -199,12 +160,12 @@ def ask_stream(request: QuestionRequest):
                 yield char
                 time.sleep(0.005)
 
-            if isinstance(result, list) and len(result) > 0 and "per" in question_text:
-                chart = generate_chart(result)
-                if chart:
-                    yield f"\n\n[Chart generated: {chart}]"
+            chart = generate_chart(result)
+            if chart:
+                yield f"\n\n[Chart generated: {chart}]"
 
         except Exception as e:
             yield f"\n\n[Error] {str(e)}"
 
     return StreamingResponse(event_stream(), media_type="text/plain")
+
