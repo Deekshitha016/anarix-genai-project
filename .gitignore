@@ -1,0 +1,54 @@
+
+# Python Bytecode
+
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pyc
+*.log
+
+
+# SQLite Database Files
+
+*.db
+*.sqlite3
+
+
+# Virtual Environment
+
+venv/
+env/
+.venv/
+ENV/
+
+
+
+
+# Image Files (Charts, Plots)
+
+*.png
+*.jpg
+*.jpeg
+chart.png
+
+
+# Editor Configurations
+
+.vscode/
+.idea/
+*.swp
+*.swo
+
+
+# System Files
+
+.DS_Store
+Thumbs.db
+
+
+# Secret or Key Files
+
+.env
+*.key
+openrouter_key.txt
